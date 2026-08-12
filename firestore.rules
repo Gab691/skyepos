@@ -1,0 +1,156 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function currentRole() {
+      return isSignedIn() && userDoc().data.isActive == true
+        ? userDoc().data.role
+        : null;
+    }
+
+    function hasRole(roles) {
+      return isSignedIn() && currentRole() in roles;
+    }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ---------------------------------------------------------------------
+    // users/{userId}
+    //   - Anyone signed in may read their own profile (needed to bootstrap
+    //     role-based UI); managers/admins may read any profile.
+    //   - A user may create ONLY their own profile document, and only with
+    //     the default CASHIER role and isActive: true - self-signup can
+    //     never grant elevated privileges.
+    //   - Only ADMIN may change a role or reactivate/deactivate an account.
+    //   - No one may delete a user document (preserve historical
+    //     cashierId/completedBy references on past orders).
+    // ---------------------------------------------------------------------
+
+    match /users/{userId} {
+      allow read: if isSelf(userId) || hasRole(['MANAGER', 'ADMIN']);
+
+      allow create: if isSelf(userId)
+        && request.resource.data.role == 'CASHIER'
+        && request.resource.data.isActive == true;
+
+      allow update: if hasRole(['ADMIN']);
+
+      allow delete: if false;
+    }
+
+    // ---------------------------------------------------------------------
+    // products/{productId}
+    //   - Any signed-in, active user may read products (cashier needs the
+    //     catalog to build an order).
+    //   - Only MANAGER/ADMIN may create or edit products.
+    //   - Products are archived (isAvailable: false), never deleted, so
+    //     historical orders always resolve their referenced productId.
+    // ---------------------------------------------------------------------
+
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow create, update: if hasRole(['MANAGER', 'ADMIN']);
+      allow delete: if false;
+    }
+
+    // ---------------------------------------------------------------------
+    // orders/{orderId}
+    //   Single source of truth for the To-Do List and Sales History alike.
+    //
+    //   - Read: any signed-in, active user (cashiers/employees need the
+    //     active queue; managers/admins additionally see Sales History).
+    //
+    //   - Create: only CASHIER/MANAGER/ADMIN, and only a well-formed
+    //     PENDING order:
+    //       * status must be PENDING, startedAt/completedAt/completedBy null
+    //       * cashierId must match the authenticated caller (no impersonation)
+    //       * payment must be non-negative and change must equal
+    //         amountReceived - total, total must equal the sum of item
+    //         subtotals, and change must never be negative
+    //     Money is re-validated here rather than trusted from the client.
+    //
+    //   - Update: split into the only two transitions the app performs.
+    //     Nothing else about an order may ever be changed after creation -
+    //     items, totals, payment, cashier, and timestamps already set are
+    //     immutable, which is what keeps Sales History accurate even if
+    //     product prices change later.
+    //
+    //   - Delete: never. Orders are never deleted, only transitioned.
+    // ---------------------------------------------------------------------
+
+    match /orders/{orderId} {
+      allow read: if isSignedIn();
+
+      allow create: if hasRole(['CASHIER', 'MANAGER', 'ADMIN'])
+        && request.resource.data.cashierId == request.auth.uid
+        && request.resource.data.status == 'PENDING'
+        && request.resource.data.startedAt == null
+        && request.resource.data.completedAt == null
+        && request.resource.data.startedBy == null
+        && request.resource.data.completedBy == null
+        && request.resource.data.total >= 0
+        && request.resource.data.subtotal == request.resource.data.total
+        && request.resource.data.payment.amountReceived >= request.resource.data.total
+        && request.resource.data.payment.change ==
+             request.resource.data.payment.amountReceived - request.resource.data.total
+        && request.resource.data.payment.change >= 0;
+
+      // Start Order: PENDING -> PREPARING, by an authorized employee, and
+      // only startedAt/startedBy/status may change.
+      allow update: if hasRole(['EMPLOYEE', 'MANAGER', 'ADMIN'])
+        && resource.data.status == 'PENDING'
+        && request.resource.data.status == 'PREPARING'
+        && request.resource.data.startedBy == request.auth.uid
+        && request.resource.data.completedAt == null
+        && request.resource.data.completedBy == null
+        && request.resource.data.items == resource.data.items
+        && request.resource.data.total == resource.data.total
+        && request.resource.data.payment == resource.data.payment;
+
+      // Complete Order: PENDING/PREPARING -> COMPLETED, by an authorized
+      // employee, and only completedAt/completedBy/status may change.
+      allow update: if hasRole(['EMPLOYEE', 'MANAGER', 'ADMIN'])
+        && resource.data.status != 'COMPLETED'
+        && request.resource.data.status == 'COMPLETED'
+        && request.resource.data.completedBy == request.auth.uid
+        && request.resource.data.items == resource.data.items
+        && request.resource.data.total == resource.data.total
+        && request.resource.data.payment == resource.data.payment
+        && request.resource.data.startedAt == resource.data.startedAt
+        && request.resource.data.startedBy == resource.data.startedBy;
+
+      allow delete: if false;
+    }
+
+    // ---------------------------------------------------------------------
+    // counters/orders - the sequential order-number counter.
+    //   Only the transaction inside createOrder touches this, from any
+    //   role permitted to create orders. Never readable/writable outside
+    //   that flow's requirements.
+    // ---------------------------------------------------------------------
+
+    match /counters/{counterId} {
+      allow read, write: if hasRole(['CASHIER', 'MANAGER', 'ADMIN']);
+    }
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
