@@ -3,7 +3,7 @@
 import { OrderCard } from "@/components/todo/OrderCard";
 import { Spinner } from "@/components/ui/Spinner";
 import { useActiveOrders } from "@/features/orders/useActiveOrders";
-import { completeOrder, startOrder } from "@/services/orderService";
+import { completeOrder, startOrder, cancelOrder } from "@/services/orderService";
 import type { UserRole } from "@/types/user";
 import { CAN_COMPLETE_ORDERS, CAN_START_ORDERS } from "@/types/user";
 
@@ -17,6 +17,7 @@ export function TodoList({ employeeId, role }: TodoListProps) {
 
   const canStart = CAN_START_ORDERS.includes(role);
   const canComplete = CAN_COMPLETE_ORDERS.includes(role);
+  const canDelete = role === "MANAGER" || role === "ADMIN";
 
   if (loading) {
     return (
@@ -42,8 +43,10 @@ export function TodoList({ employeeId, role }: TodoListProps) {
           order={order}
           canStart={canStart}
           canComplete={canComplete}
+          canDelete={canDelete}
           onStart={(orderId) => startOrder(orderId, employeeId)}
           onComplete={(orderId) => completeOrder(orderId, employeeId)}
+          onDelete={(orderId) => cancelOrder(orderId, employeeId)}
         />
       ))}
     </div>

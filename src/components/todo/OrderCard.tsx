@@ -37,11 +37,14 @@ interface OrderCardProps {
   canComplete: boolean;
   onStart: (orderId: string) => Promise<void>;
   onComplete: (orderId: string) => Promise<void>;
+  canDelete?: boolean;
+  onDelete?: (orderId: string) => Promise<void>;
 }
 
-export function OrderCard({ order, canStart, canComplete, onStart, onComplete }: OrderCardProps) {
+export function OrderCard({ order, canStart, canComplete, onStart, onComplete, canDelete = false, onDelete }: OrderCardProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Re-render on an interval so waiting time / urgency stay current without
   // any additional Firestore reads or writes.
@@ -71,6 +74,22 @@ export function OrderCard({ order, canStart, canComplete, onStart, onComplete }:
       setActionError("Unable to complete this order. Please try again.");
     } finally {
       setIsUpdating(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!onDelete) return;
+    const ok = window.confirm("Are you sure you want to delete this order? This action is irreversible.");
+    if (!ok) return;
+
+    setIsDeleting(true);
+    setActionError(null);
+    try {
+      await onDelete(order.id);
+    } catch (err) {
+      setActionError("Unable to delete this order. Please try again.");
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -113,6 +132,11 @@ export function OrderCard({ order, canStart, canComplete, onStart, onComplete }:
         {canComplete && (
           <Button size="sm" isLoading={isUpdating} onClick={handleComplete}>
             Complete Order
+          </Button>
+        )}
+        {canDelete && (
+          <Button size="sm" variant="danger" isLoading={isDeleting} onClick={handleDelete}>
+            Delete
           </Button>
         )}
       </div>

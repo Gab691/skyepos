@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  deleteDoc,
   onSnapshot,
   orderBy,
   query,
@@ -29,6 +30,7 @@ import {
   type Order,
   type OrderItem,
 } from "@/types/order";
+
 
 export class OrderValidationError extends Error {}
 export class OrderStateError extends Error {}
@@ -190,17 +192,25 @@ export async function completeOrder(orderId: string, employeeId: string): Promis
   });
 }
 
-/**
- * Deletes an order using a callable Cloud Function. Deletion is an admin
- * operation and cannot be performed directly from the client because Firestore
- * security rules disallow deleting orders from client-side code.
- */
-export async function deleteOrder(orderId: string): Promise<void> {
-  const { getFunctions, httpsCallable } = await import("firebase/functions");
-  const { firebaseApp } = await import("@/lib/firebase/client");
-  const functions = getFunctions(firebaseApp);
-  const callable = httpsCallable(functions, "deleteOrder");
-  await callable({ orderId });
+export async function cancelOrder(orderId: string, employeeId: string): Promise<void> {
+  const deleteDoc = doc(db, COLLECTIONS.orders, orderId);
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(deleteDoc);
+    if (!snap.exists()) {
+      throw new OrderStateError("Order not found.");
+    }
+    const status = snap.data().status as Order["status"];
+    if (status === ORDER_STATUS.CANCELED) {
+      throw new OrderStateError("Order has already been canceled.");
+    }
+
+    transaction.update(deleteDoc, {
+      status: ORDER_STATUS.CANCELED,
+      canceledAt: serverTimestamp(),
+      canceledBy: employeeId,
+    });
+  });
 }
 
 /**
