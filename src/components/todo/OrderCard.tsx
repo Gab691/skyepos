@@ -96,6 +96,8 @@ export function OrderCard({ order, canStart, canComplete, onStart, onComplete }:
       </ul>
 
       <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
+        <span>Cash: {formatCurrency(order.payment.amountReceived)}</span>
+        <span>Change: {formatCurrency(order.payment.change)}</span>
         <span>Total: {formatCurrency(order.total)}</span>
         <span>Waiting: {formatWaitingTime(elapsedMinutes)}</span>
       </div>

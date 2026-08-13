@@ -18,7 +18,7 @@ export async function reserveNextOrderNumber(transaction: Transaction): Promise<
 
   transaction.set(counterRef, { value: next }, { merge: true });
 
-  return String(next).padStart(3, "0");
+  return String(next).padStart(4, "0");
 }
 
 export async function peekNextOrderNumber(): Promise<string> {
@@ -29,7 +29,7 @@ export async function peekNextOrderNumber(): Promise<string> {
     const counterRef = doc(db, COUNTER_DOC_PATH);
     const snap = await transaction.get(counterRef);
     const current = snap.exists() ? (snap.data().value as number) : 0;
-    result = String(current + 1).padStart(3, "0");
+    result = String(current + 1).padStart(4, "0");
   });
   return result;
 }

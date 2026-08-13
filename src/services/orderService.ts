@@ -104,10 +104,12 @@ export async function createOrder(params: CreateOrderParams): Promise<string> {
   );
 
   const ordersCollection = collection(db, COLLECTIONS.orders);
-  const newOrderRef = doc(ordersCollection);
+
+  let docId = "";
 
   await runTransaction(db, async (transaction) => {
     const orderNumber = await reserveNextOrderNumber(transaction);
+    docId = `order_${orderNumber}`;
 
     const orderData: Omit<Order, "id"> = {
       orderNumber,
@@ -129,10 +131,11 @@ export async function createOrder(params: CreateOrderParams): Promise<string> {
       completedBy: null,
     };
 
+    const newOrderRef = doc(ordersCollection, docId);
     transaction.set(newOrderRef, orderData);
   });
 
-  return newOrderRef.id;
+  return docId;
 }
 
 /**
@@ -185,6 +188,19 @@ export async function completeOrder(orderId: string, employeeId: string): Promis
       completedBy: employeeId,
     });
   });
+}
+
+/**
+ * Deletes an order using a callable Cloud Function. Deletion is an admin
+ * operation and cannot be performed directly from the client because Firestore
+ * security rules disallow deleting orders from client-side code.
+ */
+export async function deleteOrder(orderId: string): Promise<void> {
+  const { getFunctions, httpsCallable } = await import("firebase/functions");
+  const { firebaseApp } = await import("@/lib/firebase/client");
+  const functions = getFunctions(firebaseApp);
+  const callable = httpsCallable(functions, "deleteOrder");
+  await callable({ orderId });
 }
 
 /**
