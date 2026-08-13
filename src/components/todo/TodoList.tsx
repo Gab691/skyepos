@@ -17,7 +17,7 @@ export function TodoList({ employeeId, role }: TodoListProps) {
 
   const canStart = CAN_START_ORDERS.includes(role);
   const canComplete = CAN_COMPLETE_ORDERS.includes(role);
-  const canDelete = role === "MANAGER" || role === "ADMIN";
+  const canDelete = role === "MANAGER" || role === "ADMIN" || role === "CASHIER" || role === "EMPLOYEE";
 
   if (loading) {
     return (

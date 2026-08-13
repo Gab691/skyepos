@@ -20,10 +20,10 @@ export interface AppUser {
 }
 
 /** Roles allowed to mark an order as COMPLETED. */
-export const CAN_COMPLETE_ORDERS: UserRole[] = ["EMPLOYEE", "MANAGER", "ADMIN"];
+export const CAN_COMPLETE_ORDERS: UserRole[] = ["CASHIER", "EMPLOYEE", "MANAGER", "ADMIN"];
 
 /** Roles allowed to start (begin preparing) an order. */
-export const CAN_START_ORDERS: UserRole[] = ["EMPLOYEE", "MANAGER", "ADMIN"];
+export const CAN_START_ORDERS: UserRole[] = ["CASHIER", "EMPLOYEE", "MANAGER", "ADMIN"];
 
 /** Roles allowed to create orders at the cashier/POS screen. */
 export const CAN_CREATE_ORDERS: UserRole[] = ["CASHIER", "MANAGER", "ADMIN"];
